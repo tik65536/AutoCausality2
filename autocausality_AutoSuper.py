@@ -11,46 +11,39 @@ from auto_causality.data_utils import CausalityDataset
 from loading import load_realcause_dataset
 import pandas as pd
 import numpy as np
+import argparse
 metrics = ["effectMSE"]
-#metrics = ["energy_distance"]
-components_time_budget = 300
 estimator_list = "all"
 out_dir = "./Super_NewData/"
 filename_out = "synthetic_observational_cate"
 #datapath="./DataSet/"
+parser = argparse.ArgumentParser()
+parser.add_argument('-dataset', type=str, default="lalonde_psid",
+                    help='lalonde_psid or lalonde_cps or twins' )
 
-run=np.arange(100)
-#np.random.shuffle(run)
-test=run[72:]
-run=run[:70]
+parser.add_argument('-numOfSample', type=int, default=4,
+                    help='Numer of Sub Dataset to use')
 
-for i_run in [45]:
-    i_run = int(i_run)
-    print(f"Dataset {i_run} Start")
-    #with open(f"{datapath}dataset_run_{i_run+1}.data", "rb") as f:
-    #    data=pickle.load(f)
-    #train_df=data['train_df']
-    #test_df=data['test_df']
-    i_run = int(i_run)
-    train_df = load_realcause_dataset('lalonde_psid', i_run)
-    for di in range(1,4):
-    	train_df=train_df.append(load_realcause_dataset('lalonde_psid',i_run+di))
+parser.add_argument('-budget', type=int, default=300,
+                    help='Time budget fro Components Model')
+args = parser.parse_args()
+datasetname=args.dataset
+numOfSample=args.numOfSample
+components_time_budget = args.budget
+run=np.arange(80)
+test=np.arange(80,100)
+np.random.shuffle(run)
+
+
+for nouse in range(1):
+    run=run[:numOfSample]
+    print(f"Dataset ID:{run} Start")
+    train_df = load_realcause_dataset(datasetname, int(run[0]))
+    for di in run[1:]:
+       train_df=train_df.append(load_realcause_dataset(datasetname,int(di)))
     print(f'Data Set Shape : {train_df.shape}',flush=True)
     features_X=list(train_df.columns[:-5])
     train_df.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
-    itemedian=train_df['true_effect'].median()
-    d=train_df['true_effect'].values
-    d=np.where(d>itemedian,1,0)
-    train_df['over']=d
-    #omin,omax=np.min(train_df['re74']),np.max(train_df['re74'])
-    #tmin,tmax=np.min(train_df['re75']),np.max(train_df['re75'])
-    #train_df['re74']=(train_df['re74']-omin)/omax
-    #train_df['re75']=(train_df['re75']-tmin)/tmax
-    #xmin,xmax=np.min(train_df['outcome']),np.max(train_df['outcome'])
-    #tmean,tvar=train_df['true_effect'].mean(),train_df['true_effect'].std()
-    #train_df['outcome']=(train_df['outcome']-xmin)/xmax
-    #train_df['true_effect']=(train_df['true_effect']-tmean)/tvar
-    #features_W=data['features_W']
     print(f"features_X: {features_X}")
     starttime=time.time()
 
@@ -71,7 +64,6 @@ for i_run in [45]:
             outcome=["outcome"],
             #common_causes=features_W,
             effect_modifiers=features_X,
-            stratify="over"
         )
         # compute relevant scores (skip newdummy)
         # get scores on train,val,test for each trial,
@@ -90,17 +82,9 @@ for i_run in [45]:
                 tmp =  load_realcause_dataset('lalonde_psid', t)
                 tmp.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
                 tmp.drop(['y0','y1'],axis=1,inplace=True)
-                #omin,omax=np.min(tmp['outcome']),np.max(tmp['outcome'])
-                #tmin,tmax=tmp['true_effect'].mean(),tmp['true_effect'].std()
-                #tmp['outcome']=(tmp['outcome']-omin)/omax
-                #tmp['true_effect']=(tmp['true_effect']-tmin)/tmax
-                #omin,omax=np.min(tmp['re74']),np.max(tmp['re74'])
-                #tmin,tmax=np.min(tmp['re75']),np.max(tmp['re75'])
-                #tmp['re74']=(tmp['re74']-omin)/omax
-                #tmp['re75']=(tmp['re75']-tmin)/tmax
                 datasets = {"test":tmp}
                 for ds_name, df in datasets.items():
-                    print(f"Dataset {i_run} Make Score {estimator_name}, TestSet {ds_name} ")
+                    print(f"Dataset {i_run} Make Score {estimator_name}, TestSet ID: {t} ")
                     scores[ds_name] = {}
                     # make scores
                     if not isinstance(df, CausalityDataset):
@@ -132,8 +116,6 @@ for i_run in [45]:
                     except KeyError:
                         pass
                 estimator_scores[estimator_name].append(scores)
-                break
-
 
         # sort trials by validation performance
         for k in estimator_scores.keys():
@@ -153,5 +135,5 @@ for i_run in [45]:
 
 
 
-    with open(f"{out_dir}{filename_out}_{metric}_run_{i_run}_test_{t}.pkl", "wb") as f:
+    with open(f"{out_dir}{filename_out}_{metric}_run_{run}_test_{t}.pkl", "wb") as f:
         pickle.dump(results, f)

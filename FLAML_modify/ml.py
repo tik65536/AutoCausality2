@@ -45,6 +45,7 @@ from flaml.automl.model import (
     SparkLGBMEstimator,
     SVM,
     Gaussian,
+    Multinomial,
     GPC,
     DTC,
     ExTC,
@@ -172,6 +173,8 @@ def get_estimator_class(task: str, estimator_name: str) -> EstimatorSubclass:
         estimator_class = TransformersEstimatorModelSelection
     elif estimator_name == "Gaussian":
         estimator_class =  Gaussian
+    elif estimator_name == "Multinomial":
+        estimator_class =  Multinomial
     elif estimator_name == "SVM":
         estimator_class =  SVM
     elif estimator_name == "MLP":

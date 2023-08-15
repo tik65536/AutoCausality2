@@ -22,6 +22,7 @@ from auto_causality.r_score import RScoreWrapper
 from auto_causality.utils import clean_config, treatment_is_multivalue
 from auto_causality.models.monkey_patches import AutoML
 from auto_causality.models.Bayesian import Gaussian
+from auto_causality.models.Bayesian import Multinomial
 from auto_causality.models.SVM import SVM
 from auto_causality.models.GaussianProcess import GPC
 from auto_causality.models.DTS import DTC
@@ -243,9 +244,10 @@ class AutoCausality:
             self.propensity_model.add_learner(learner_name='LR', learner_class=LR)
         elif propensity_model == "super":
             self.propensity_model = AutoML(
-                **{**self._settings["component_models"], "task": "classification","estimator_list":['Gaussian','SVM','MLP','DTC','ExTC','LR']}
+                **{**self._settings["component_models"], "task": "classification","estimator_list":['Gaussian','Multinomial','SVM','MLP','DTC','ExTC','LR']}
             )
             self.propensity_model.add_learner(learner_name='Gaussian', learner_class=Gaussian)
+            self.propensity_model.add_learner(learner_name='Multinomial', learner_class=Multinomial)
             self.propensity_model.add_learner(learner_name='SVM', learner_class=SVM)
             self.propensity_model.add_learner(learner_name='MLP', learner_class=MLP)
             self.propensity_model.add_learner(learner_name='DTC', learner_class=DTC)
@@ -263,6 +265,7 @@ class AutoCausality:
     def fit(
         self,
         data: Union[pd.DataFrame, CausalityDataset],
+        vdata: Union[pd.DataFrame, CausalityDataset] = None,
         treatment: str = None,
         outcome: str = None,
         common_causes: List[str] = None,
@@ -315,9 +318,13 @@ class AutoCausality:
 
         # To be used for component model training/selection
         stratifylist= self.data.data[stratify] if (stratify is not None) else None
-        self.train_df, self.test_df = train_test_split(
-            self.data.data, train_size=self._settings["train_size"], shuffle=True,stratify=stratifylist
-        )
+        if(vdata is None):
+            self.train_df, self.test_df = train_test_split(
+                self.data.data, train_size=self._settings["train_size"], shuffle=True,stratify=stratifylist
+            )
+        else:
+            self.train_df = self.data.data
+            self.test_df = vdata 
 
         # smuggle propensity modifiers into common causes, filter later in component models
         self.causal_model = CausalModel(
