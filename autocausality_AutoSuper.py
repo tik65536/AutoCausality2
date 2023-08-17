@@ -37,14 +37,14 @@ np.random.shuffle(run)
 
 for nouse in range(1):
     run=run[:numOfSample]
-    print(f"Dataset ID:{run} Start")
+    print(f"Dataset ID:{run} Start",flush=True)
     train_df = load_realcause_dataset(datasetname, int(run[0]))
     for di in run[1:]:
        train_df=train_df.append(load_realcause_dataset(datasetname,int(di)))
     print(f'Data Set Shape : {train_df.shape}',flush=True)
     features_X=list(train_df.columns[:-5])
     train_df.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
-    print(f"features_X: {features_X}")
+    print(f"features_X: {features_X}",flush=True)
     starttime=time.time()
 
     for metric in metrics:
@@ -70,11 +70,11 @@ for nouse in range(1):
         # sort trials by validation set performance
         # assign trials to estimators
         estimator_scores = {est: [] for est in ac.scores.keys() if "NewDummy" not in est}
-        print(f"Dataset {i_run} Make Score")
+        print(f"Dataset {datasetname} Make Score",flush=True)
         for trial in ac.results.trials:
             # estimator name:
             estimator_name = trial.last_result["estimator_name"]
-            print(f"Dataset {i_run} Make Score {estimator_name} ")
+            print(f"Dataset {datasetname} Make Score {estimator_name} ",flush=True)
             if  trial.last_result["estimator"]:
                 estimator = trial.last_result["estimator"]
                 scores = {}
@@ -84,7 +84,7 @@ for nouse in range(1):
                 tmp.drop(['y0','y1'],axis=1,inplace=True)
                 datasets = {"test":tmp}
                 for ds_name, df in datasets.items():
-                    print(f"Dataset {i_run} Make Score {estimator_name}, TestSet ID: {t} ")
+                    print(f"Dataset {datasetname} Make Score {estimator_name}, TestSet ID: {t} ",flush=True)
                     scores[ds_name] = {}
                     # make scores
                     if not isinstance(df, CausalityDataset):
@@ -131,7 +131,7 @@ for nouse in range(1):
         "optimised_metric": metric,
         "scores_per_estimator": estimator_scores,
     }
-    print(f"Dataset {i_run} End {time.time()-starttime} , best {ac.best_estimator}")
+    print(f"Dataset {datasetname} End {time.time()-starttime} , best {ac.best_estimator}",flush=True)
 
 
 
