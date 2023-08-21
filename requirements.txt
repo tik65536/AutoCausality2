@@ -3,6 +3,7 @@ catboost==1.2
 causallib==0.9.5
 comet_ml==3.33.6
 dowhy==0.9.1
+dcor==0.6
 econml==0.14.1
 FLAML==1.2.4
 gpytorch==1.11
