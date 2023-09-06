@@ -9,6 +9,7 @@ from auto_causality import AutoCausality
 from auto_causality.datasets import generate_synthetic_data
 from auto_causality.data_utils import CausalityDataset
 from loading import load_realcause_dataset
+from data.lbidd import load_lbidd
 import pandas as pd
 import numpy as np
 import argparse
@@ -18,8 +19,9 @@ out_dir = "./Super_NewData/"
 filename_out = "synthetic_observational_cate"
 #datapath="./DataSet/"
 parser = argparse.ArgumentParser()
-parser.add_argument('-dataset', type=str, default="lalonde_psid",
-                    help='lalonde_psid or lalonde_cps or twins' )
+
+parser.add_argument('-dataset', nargs="*", default=['lalonde_psid'],
+                    help='lalonde_psid , lalonde_cps , twins, lbidd ' )
 
 parser.add_argument('-numOfSample', type=int, default=4,
                     help='Numer of Sub Dataset to use')
@@ -34,16 +36,75 @@ run=np.arange(80)
 test=np.arange(80,100)
 np.random.shuffle(run)
 
+trainingset=[]
+testset=[]
 
-for nouse in range(1):
+linkfunc=['linear','quadratic','cubic','log','exp']
+log_degy=[  8,  11,   9,   5,  20,  19,  17,  13,   6,  21,  27,  28,  24,
+        37,  32,  38,  47,  12,  79,  82,  98,   7,  10,  15,  35,  44,
+        30,  25,  16,  88,  76,  99,  53,  89,   4,   2,  14,  18,  40,
+        33,  51,  36,  48,  62,  41,   3,  31,  43,  42,  97,  59, 101,
+        34,  45,  78,  87,  86,  23,  22,  58,  52,  50,  75]
+
+exp_degy=[  8,  11,   9,   5,  20,  19,  17,  13,   6,  21,  27,  28,  24,
+        37,  38,  12,  79,  82,  93,  75,  98,   7,  10,  15,  35,  44,
+        32,  25,  16,  47,  76,  99,  53,  89,   4,   2,  14,  18,  33,
+        51,  48,  62,  41,  88,   3,  31,  43,  42,  97,  54,  59, 101,
+        45,  87,  86,  23,  40,  22,  58]
+
+if('lalonde_psid' in datasetname):
     run=run[:numOfSample]
     print(f"Dataset ID:{run} Start",flush=True)
-    train_df = load_realcause_dataset(datasetname, int(run[0]))
+    df = load_realcause_dataset('lalonde_psid', int(run[0]))
     for di in run[1:]:
-       train_df=train_df.append(load_realcause_dataset(datasetname,int(di)))
-    print(f'Data Set Shape : {train_df.shape}',flush=True)
-    features_X=list(train_df.columns[:-5])
-    train_df.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
+       df=df.append(load_realcause_dataset(datasetname,int(di)))
+    print(f'Data Set Shape : {df.shape}',flush=True)
+    df.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
+    df.drop(['y0','y1'],axis=1,inplace=True)
+    trainingset.append(df)
+    t = int(np.random.choice(test,1))
+    tmp =  load_realcause_dataset('lalonde_psid', t)
+    tmp.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
+    tmp.drop(['y0','y1'],axis=1,inplace=True)
+    testset.append(tmp)
+
+if('lbidd' in datasetname):
+    param=pd.read_csv('./datasets/lbidd/scaling/params.csv')
+    for i in linkfunc[:3]:
+        d=load_lbidd(n=25000,link=i,return_ites=True,n_shared_parents=None)
+        columns=[ f'W_{idx}' for idx in range(d['w'][0].shape[0]) ]
+        columns+=['treatment','outcome','true_effect']
+        dat=np.hstack((d['w'],d['t'].reshape(-1,1),d['y'].reshape(-1,1),d['ites'].reshape(-1,1)))
+        idx=np.arange(25000)
+        np.random.shuffle(idx)
+        df=pd.DataFrame(dat[idx[:20000]],columns=columns)
+        trainingset.append(df)
+        df=pd.DataFrame(dat[idx[20000:]],columns=columns)
+        testset.append(df)
+
+    # log linkfunc
+    for i in log_degy:
+        degzlist=param[(param['size']==25000) & (param['link_type']=='log') & (param['deg(y)']==i)]['deg(z)'].unique()
+        for j in degzlist:
+            print(f'lbidd log link func, deg(y):{i} , deg(z):{j}')
+            d=load_lbidd(n=25000,link='log',degree_y=i,degree_t=j,return_ites=True,n_shared_parents=None)
+            columns=[ f'W_{idx}' for idx in range(d['w'][0].shape[0]) ]
+            columns+=['treatment','outcome','true_effect']
+            dat=np.hstack((d['w'],d['t'].reshape(-1,1),d['y'].reshape(-1,1),d['ites'].reshape(-1,1)))
+            idx=np.arange(25000)
+            np.random.shuffle(idx)
+            df=pd.DataFrame(dat[idx[:20000]],columns=columns)
+            trainingset.append(df)
+            df=pd.DataFrame(dat[idx[20000:]],columns=columns)
+            testset.append(df)
+
+print(f'TrainingSet len :{len(trainingset)}')
+print(f'TestSet len :{len(testset)}')
+
+for train_df,test_df in zip(trainingset,testset):
+    print(train_df.describe())
+    print(train_df.isnull().values.any())
+    features_X=list(train_df.columns[:-3])
     print(f"features_X: {features_X}",flush=True)
     starttime=time.time()
 
@@ -78,13 +139,9 @@ for nouse in range(1):
             if  trial.last_result["estimator"]:
                 estimator = trial.last_result["estimator"]
                 scores = {}
-                t = int(np.random.choice(test,1))
-                tmp =  load_realcause_dataset('lalonde_psid', t)
-                tmp.rename(columns = {'t':'treatment','y':'outcome','ite':'true_effect'}, inplace = True)
-                tmp.drop(['y0','y1'],axis=1,inplace=True)
-                datasets = {"test":tmp}
+                datasets = {"test":test_df}
                 for ds_name, df in datasets.items():
-                    print(f"Dataset {datasetname} Make Score {estimator_name}, TestSet ID: {t} ",flush=True)
+                    print(f"Dataset {datasetname} Make Score {estimator_name}",flush=True)
                     scores[ds_name] = {}
                     # make scores
                     if not isinstance(df, CausalityDataset):
