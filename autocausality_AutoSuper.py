@@ -97,10 +97,25 @@ if('lbidd' in datasetname):
             trainingset.append(df)
             df=pd.DataFrame(dat[idx[20000:]],columns=columns)
             testset.append(df)
+    # exp linkfunc
+    for i in exp_degy:
+        degzlist=param[(param['size']==25000) & (param['link_type']=='exp') & (param['deg(y)']==i)]['deg(z)'].unique()
+        for j in degzlist:
+            print(f'lbidd exp link func, deg(y):{i} , deg(z):{j}')
+            d=load_lbidd(n=25000,link='log',degree_y=i,degree_t=j,return_ites=True,n_shared_parents=None)
+            columns=[ f'W_{idx}' for idx in range(d['w'][0].shape[0]) ]
+            columns+=['treatment','outcome','true_effect']
+            dat=np.hstack((d['w'],d['t'].reshape(-1,1),d['y'].reshape(-1,1),d['ites'].reshape(-1,1)))
+            idx=np.arange(25000)
+            np.random.shuffle(idx)
+            df=pd.DataFrame(dat[idx[:20000]],columns=columns)
+            trainingset.append(df)
+            df=pd.DataFrame(dat[idx[20000:]],columns=columns)
+            testset.append(df)
 
 print(f'TrainingSet len :{len(trainingset)}')
 print(f'TestSet len :{len(testset)}')
-
+count=0
 for train_df,test_df in zip(trainingset,testset):
     print(train_df.describe())
     print(train_df.isnull().values.any())
@@ -192,5 +207,6 @@ for train_df,test_df in zip(trainingset,testset):
 
 
 
-    with open(f"{out_dir}{filename_out}_{metric}_run_{run}_test_{t}.pkl", "wb") as f:
+    with open(f"{out_dir}{filename_out}_{metric}_{count}_run_test.pkl", "wb") as f:
         pickle.dump(results, f)
+    count+=1
