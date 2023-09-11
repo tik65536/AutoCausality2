@@ -13,6 +13,7 @@ from data.lbidd import load_lbidd
 import pandas as pd
 import numpy as np
 import argparse
+import pymp
 metrics = ["effectMSE"]
 estimator_list = "all"
 out_dir = "./Super_NewData/"
@@ -28,10 +29,14 @@ parser.add_argument('-numOfSample', type=int, default=4,
 
 parser.add_argument('-budget', type=int, default=300,
                     help='Time budget fro Components Model')
+
+parser.add_argument('-mp', type=int, default=1,
+                    help='Number of parallel process')
 args = parser.parse_args()
 datasetname=args.dataset
 numOfSample=args.numOfSample
 components_time_budget = args.budget
+mp = args.mp
 run=np.arange(80)
 test=np.arange(80,100)
 np.random.shuffle(run)
@@ -121,96 +126,97 @@ if('lbidd' in datasetname):
 
 print(f'TrainingSet len :{len(trainingset)}')
 print(f'TestSet len :{len(testset)}')
-count=0
-for train_df,df_test in zip(trainingset,testset):
-    print(f'Training Dataset {train_df.name} Start , shape : {train_df.shape}')
-    features_X=list(train_df.columns[:-3])
-    print(f"features_X: {features_X}",flush=True)
-    starttime=time.time()
+with pymp.Parallel(mp) as p:
+    for index in p.range(len(trainingset)):
+        train_df = trainingset[index]
+        df_test = testset[index]
+        print(f'Training Dataset {train_df.name} Start , shape : {train_df.shape}')
+        features_X=list(train_df.columns[:-3])
+        print(f"features_X: {features_X}",flush=True)
+        starttime=time.time()
 
-    for metric in metrics:
-        ac = AutoCausality(
-            metric=metric,
-            verbose=1,
-            components_verbose=1,
-            components_time_budget=components_time_budget,
-            estimator_list=estimator_list,
-            store_all_estimators=True,
-            propensity_model="super",
-        )
+        for metric in metrics:
+            ac = AutoCausality(
+                metric=metric,
+                verbose=1,
+                components_verbose=1,
+                components_time_budget=components_time_budget,
+                estimator_list=estimator_list,
+                store_all_estimators=True,
+                propensity_model="super",
+            )
 
-        ac.fit(
-            train_df,
-            treatment="treatment",
-            outcome=["outcome"],
-            #common_causes=features_W,
-            effect_modifiers=features_X,
-        )
-        # compute relevant scores (skip newdummy)
-        # get scores on train,val,test for each trial,
-        # sort trials by validation set performance
-        # assign trials to estimators
-        estimator_scores = {est: [] for est in ac.scores.keys() if "NewDummy" not in est}
-        ds_name='test'
-        data=None
-        print(f'Test Dataset {df_test.name} Start , shape : {df_test.shape}')
-        if not isinstance(df_test, CausalityDataset):
-            assert isinstance(df_test, pd.DataFrame)
-            data = CausalityDataset(
-                df_test,
+            ac.fit(
+                train_df,
                 treatment="treatment",
-                outcomes=["outcome"],
+                outcome=["outcome"],
                 #common_causes=features_W,
                 effect_modifiers=features_X,
             )
-        for trial in ac.results.trials:
-            # estimator name:
-            estimator_name = trial.last_result["estimator_name"]
-            print(f"Dataset {df_test.name}  Make Score {estimator_name} ",flush=True)
-            if  trial.last_result["estimator"]:
-                estimator = trial.last_result["estimator"]
-                scores = {}
-                scores[ds_name] = {}
-                # make scores
-                est_scores = ac.scorer.make_scores(
-                    estimator,
-                    data.data,
-                    #problem=ac.problem,
-                    metrics_to_report=ac.metrics_to_report,
+            # compute relevant scores (skip newdummy)
+            # get scores on train,val,test for each trial,
+            # sort trials by validation set performance
+            # assign trials to estimators
+            estimator_scores = {est: [] for est in ac.scores.keys() if "NewDummy" not in est}
+            ds_name='test'
+            data=None
+            print(f'Test Dataset {df_test.name} Start , shape : {df_test.shape}')
+            if not isinstance(df_test, CausalityDataset):
+                assert isinstance(df_test, pd.DataFrame)
+                data = CausalityDataset(
+                    df_test,
+                    treatment="treatment",
+                    outcomes=["outcome"],
+                    #common_causes=features_W,
+                    effect_modifiers=features_X,
                 )
+            for trial in ac.results.trials:
+                # estimator name:
+                estimator_name = trial.last_result["estimator_name"]
+                print(f"Dataset {df_test.name}  Make Score {estimator_name} ",flush=True)
+                if  trial.last_result["estimator"]:
+                    estimator = trial.last_result["estimator"]
+                    scores = {}
+                    scores[ds_name] = {}
+                    # make scores
+                    est_scores = ac.scorer.make_scores(
+                        estimator,
+                        data.data,
+                        #problem=ac.problem,
+                        metrics_to_report=ac.metrics_to_report,
+                    )
 
-                # add cate:
-                scores[ds_name]["CATE_estimate"] = estimator.estimator.effect(df_test)
-                # add ground truth for convenience
-                scores[ds_name]["CATE_groundtruth"] = df["true_effect"]
-                scores[ds_name][metric] = est_scores[metric]
-                try:
-                    scores[ds_name]['#_Propensity_model']=est_scores['#_Propensity_model']
-                    scores[ds_name]['#_Propensity_Para']=est_scores['#_Propensity_model_param']
-                    scores[ds_name]['values']=est_scores['values']
-                except KeyError:
-                    pass
-                estimator_scores[estimator_name].append(scores)
+                    # add cate:
+                    scores[ds_name]["CATE_estimate"] = estimator.estimator.effect(df_test)
+                    # add ground truth for convenience
+                    scores[ds_name]["CATE_groundtruth"] = df["true_effect"]
+                    scores[ds_name][metric] = est_scores[metric]
+                    try:
+                        scores[ds_name]['#_Propensity_model']=est_scores['#_Propensity_model']
+                        scores[ds_name]['#_Propensity_Para']=est_scores['#_Propensity_model_param']
+                        scores[ds_name]['values']=est_scores['values']
+                    except KeyError:
+                        pass
+                    estimator_scores[estimator_name].append(scores)
 
-        # sort trials by validation performance
-        for k in estimator_scores.keys():
-            estimator_scores[k] = sorted(
-                estimator_scores[k],
-            key=lambda x: x["test"][metric],
-            reverse=False if (metric == "energy_distance" or metric =="effectMSE") else True,
-        )
-    results = {
-        "best_estimator": ac.best_estimator,
-        "best_config": ac.best_config,
-        "best_score": ac.best_score,
-        "optimised_metric": metric,
-        "dataset": df_test.name,
-        "scores_per_estimator": estimator_scores,
-    }
-    print(f"Dataset {train_df.name} End {time.time()-starttime} , best {ac.best_estimator}",flush=True)
+            # sort trials by validation performance
+            for k in estimator_scores.keys():
+                estimator_scores[k] = sorted(
+                    estimator_scores[k],
+                key=lambda x: x["test"][metric],
+                reverse=False if (metric == "energy_distance" or metric =="effectMSE") else True,
+            )
+        results = {
+            "best_estimator": ac.best_estimator,
+            "best_config": ac.best_config,
+            "best_score": ac.best_score,
+            "optimised_metric": metric,
+            "dataset": df_test.name,
+            "scores_per_estimator": estimator_scores,
+        }
+        print(f"Dataset {train_df.name} End {time.time()-starttime} , best {ac.best_estimator}",flush=True)
 
 
 
-    with open(f"{out_dir}{filename_out}_{metric}_{count}_{df_test.name}_run_test.pkl", "wb") as f:
-        pickle.dump(results, f)
-    count+=1
+        with open(f"{out_dir}{filename_out}_{metric}_{index}_{df_test.name}_run_test.pkl", "wb") as f:
+            pickle.dump(results, f)
