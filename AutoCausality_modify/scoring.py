@@ -297,7 +297,7 @@ class Scorer:
             values = df[[treatment_name, outcome_name]]
             simple_ate = self.ate(df)[0]
             # Debug Msg
-            print(f'Scoring DF Columns: {df.columns}',flush=True)
+            #print(f'Scoring DF Columns: {df.columns}',flush=True)
             _model=self.psw_estimator.estimator.propensity_model
             _propensity_param=_model._trained_estimator.get_params(True)
             if(type(_model._trained_estimator).__name__=="MLP"):
@@ -315,7 +315,6 @@ class Scorer:
                 name=type(_model._trained_estimator).__name__
             else:
                 print(f'Propensity Model : {type(_model).__name__}',flush=True)
-            print(f'Propensity Model FeatureNumber: {_model.feature_names_in_}')
             out['#_Propensity_model']=type(_model._trained_estimator).__name__
             out['#_Propensity_model_param']=_propensity_param
             if isinstance(simple_ate, float):
@@ -326,7 +325,6 @@ class Scorer:
                     # df_p = effect+common_causes
                     X_names=self.psw_estimator._effect_modifier_names+ self.psw_estimator._observed_common_causes_names
                     df_p=df[X_names]
-                    print(f'Scoring DF modified Columns: {df_p.columns}',flush=True)
                     values[
                         "p"
                     ] = self.psw_estimator.estimator.propensity_model.predict_proba(df_p)[
@@ -372,11 +370,9 @@ class Scorer:
                 rmse=np.sqrt(mse)
                 a=np.mean(cate_estimate)
                 b=np.mean(df['true_effect'])
-                print(f'{type(est).__name__} Effect MSE: {mse:8.5f}, Effect RMSE: {rmse:8.5f}, Estimate Mean Effect : {a:8.5f}, True Mean Effect : {b:8.5f}')
+                print(f'Effect MSE: {mse:8.5f}, Effect RMSE: {rmse:8.5f}, Estimate Mean Effect : {a:8.5f}, True Mean Effect : {b:8.5f}')
                 out["effectMSE"] = mse
                 out["effectRMSE"] = rmse
-                with open(f'./r_{rmse}.plk','wb') as f:
-                    pickle.dump(np.stack((cate_estimate,df['true_effect'])),f)
 
             if "auc" in metrics_to_report:
                 out["auc"] = Scorer.auc_make_score(estimate, df, cate_estimate)
