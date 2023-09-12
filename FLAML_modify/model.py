@@ -2563,7 +2563,7 @@ class Gaussian(SKLearnEstimator):
     @classmethod
     def search_space(cls,data_size,task):
         space={
-            'var_smoothing':{'domain':tune.uniform(lower=0,upper=10),'init_value':1e-9, }
+            'var_smoothing':{'domain':tune.uniform(lower=1e-10,upper=10),'init_value':1e-9, }
         }
         return space
 
